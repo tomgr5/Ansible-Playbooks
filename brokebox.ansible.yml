@@ -31,8 +31,6 @@
         targets:
           CentOS: ["7.6", "7.7", "7.8", "7.9", "8"]
           AlmaLinux: ["9"]
-          Debian: ["stretch", "buster"]
-          Ubuntu: ["bionic", "focal"]
         target_versions: "{{ targets[ansible_distribution] }}"
 
     # Step 2: Install LAMP stack (Apache, MySQL, PHP)
@@ -48,31 +46,12 @@
         state: present
       when: ansible_distribution in ['CentOS', 'AlmaLinux']
 
-    - name: Install Apache, MySQL, and PHP packages on Ubuntu and Debian
-      apt:
-        name:
-          - apache2
-          - mysql-server
-          - php
-          - php-cli
-          - libapache2-mod-php
-          - php-mysql
-        state: present
-      when: ansible_distribution in ['Ubuntu', 'Debian']
-
     - name: Start and enable Apache on AlmaLinux and CentOS
       systemd:
         name: httpd
         enabled: yes
         state: started
       when: ansible_distribution in ['CentOS', 'AlmaLinux']
-
-    - name: Start and enable Apache on Ubuntu and Debian
-      systemd:
-        name: apache2
-        enabled: yes
-        state: started
-      when: ansible_distribution in ['Ubuntu', 'Debian']
 
     - name: Start and enable MySQL
       systemd:
@@ -81,26 +60,12 @@
         state: started
       when: ansible_distribution in ['CentOS', 'AlmaLinux']
 
-    - name: Start and enable MySQL for Ubuntu and Debian
-      systemd:
-        name: mysql
-        enabled: yes
-        state: started
-      when: ansible_distribution in ['Ubuntu', 'Debian']
-
     - name: Start and enable PHP-FPM on AlmaLinux and CentOS
       systemd:
         name: php-fpm
         enabled: yes
         state: started
       when: ansible_distribution in ['CentOS', 'AlmaLinux']
-
-    - name: Start and enable PHP-FPM on Ubuntu and Debian
-      systemd:
-        name: php7.4-fpm
-        enabled: yes
-        state: started
-      when: ansible_distribution in ['Ubuntu', 'Debian']
 
     # Step 3: Secure MySQL and configure WordPress database
     - name: Set MySQL root password
@@ -161,35 +126,17 @@
         state: restarted
       when: ansible_distribution in ['CentOS', 'AlmaLinux']
 
-    - name: Restart Apache on Ubuntu and Debian
-      systemd:
-        name: apache2
-        state: restarted
-      when: ansible_distribution in ['Ubuntu', 'Debian']
-
     - name: Restart MySQL
       systemd:
         name: mysqld
         state: restarted
       when: ansible_distribution in ['CentOS', 'AlmaLinux']
 
-    - name: Restart MySQL on Ubuntu and Debian
-      systemd:
-        name: mysql
-        state: restarted
-      when: ansible_distribution in ['Ubuntu', 'Debian']
-
     - name: Restart PHP-FPM on AlmaLinux and CentOS
       systemd:
         name: php-fpm
         state: restarted
       when: ansible_distribution in ['CentOS', 'AlmaLinux']
-
-    - name: Restart PHP-FPM on Ubuntu and Debian
-      systemd:
-        name: php7.4-fpm
-        state: restarted
-      when: ansible_distribution in ['Ubuntu', 'Debian']
 
   handlers:
     - name: Restart Apache
