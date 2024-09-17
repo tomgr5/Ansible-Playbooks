@@ -1,0 +1,198 @@
+---
+- name: Setup and troubleshoot a WordPress server with high load for technical support
+  hosts: wordpress
+  become: yes
+  gather_facts: true
+
+  vars:
+    use_ultrastack: true
+    use_letsencrypt: false
+    site_domain: "{{ ansible_default_ipv4.address }}"  # Replaced domain with the server's IP address
+    site_email: "admin@example.com"  # Made generic
+    site_user: "admin_user"  # Static username
+    site_pass: "A8dL3cGmV4xJ9zWf7tHq"  # Static secure password
+    system_user: "wordpress"
+    mysql_root_password: "M6rT2pXkS5vN8uZq0jWy"  # Static secure password
+
+  tasks:
+    # Step 1: Check basic requirements for host system
+    - name: Check if Python 3 is installed
+      raw: command -v python3 || command -v python
+      changed_when: false
+
+    - name: Gather system facts
+      setup:
+
+    - name: Check if host OS is supported
+      fail:
+        msg: "{{ ansible_distribution }} {{ ansible_distribution_version }} is not supported."
+      when: ansible_distribution not in targets.keys() or (ansible_distribution_version not in target_versions)
+      vars:
+        targets:
+          CentOS: ["7.6", "7.7", "7.8", "7.9", "8"]
+          AlmaLinux: ["9"]
+          Debian: ["stretch", "buster"]
+          Ubuntu: ["bionic", "focal"]
+        target_versions: "{{ targets[ansible_distribution] }}"
+
+    # Step 2: Install LAMP stack (Apache, MySQL, PHP)
+    - name: Install Apache, MySQL, and PHP packages on AlmaLinux and CentOS
+      yum:
+        name:
+          - httpd
+          - mysql-server
+          - php
+          - php-cli
+          - php-mysqlnd
+          - php-fpm
+        state: present
+      when: ansible_distribution in ['CentOS', 'AlmaLinux']
+
+    - name: Install Apache, MySQL, and PHP packages on Ubuntu and Debian
+      apt:
+        name:
+          - apache2
+          - mysql-server
+          - php
+          - php-cli
+          - libapache2-mod-php
+          - php-mysql
+        state: present
+      when: ansible_distribution in ['Ubuntu', 'Debian']
+
+    - name: Start and enable Apache on AlmaLinux and CentOS
+      systemd:
+        name: httpd
+        enabled: yes
+        state: started
+      when: ansible_distribution in ['CentOS', 'AlmaLinux']
+
+    - name: Start and enable Apache on Ubuntu and Debian
+      systemd:
+        name: apache2
+        enabled: yes
+        state: started
+      when: ansible_distribution in ['Ubuntu', 'Debian']
+
+    - name: Start and enable MySQL
+      systemd:
+        name: mysqld
+        enabled: yes
+        state: started
+      when: ansible_distribution in ['CentOS', 'AlmaLinux']
+
+    - name: Start and enable MySQL for Ubuntu and Debian
+      systemd:
+        name: mysql
+        enabled: yes
+        state: started
+      when: ansible_distribution in ['Ubuntu', 'Debian']
+
+    - name: Start and enable PHP-FPM on AlmaLinux and CentOS
+      systemd:
+        name: php-fpm
+        enabled: yes
+        state: started
+      when: ansible_distribution in ['CentOS', 'AlmaLinux']
+
+    - name: Start and enable PHP-FPM on Ubuntu and Debian
+      systemd:
+        name: php7.4-fpm
+        enabled: yes
+        state: started
+      when: ansible_distribution in ['Ubuntu', 'Debian']
+
+    # Step 3: Secure MySQL and configure WordPress database
+    - name: Set MySQL root password
+      mysql_user:
+        name: root
+        password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/lib/mysql/mysql.sock
+        state: present
+
+    - name: Create WordPress database
+      mysql_db:
+        name: wordpress
+        state: present
+
+    - name: Create WordPress MySQL user
+      mysql_user:
+        name: wp_user
+        password: wp_password
+        priv: 'wordpress.*:ALL'
+        state: present
+
+    # Step 4: Install WordPress and configure high load simulation
+    - name: Download WP-CLI
+      get_url:
+        url: https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar
+        dest: /usr/local/bin/wp
+        mode: '0755'
+
+    - name: Install WordPress
+      command: wp core download --path=/var/www/html/wordpress
+      args:
+        chdir: /var/www/html
+
+    - name: Create WordPress config file
+      command: wp config create --dbname=wordpress --dbuser=wp_user --dbpass=wp_password --path=/var/www/html/wordpress
+      args:
+        chdir: /var/www/html/wordpress
+
+    - name: Install WordPress
+      command: wp core install --url="http://{{ site_domain }}" --title="WordPress Test" --admin_user="{{ site_user }}" --admin_password="{{ site_pass }}" --admin_email="{{ site_email }}" --path=/var/www/html/wordpress
+      args:
+        chdir: /var/www/html/wordpress
+
+    - name: Install and activate high load plugin (WP Super Cache)
+      command: wp plugin install wp-super-cache --activate --path=/var/www/html/wordpress
+      args:
+        chdir: /var/www/html/wordpress
+
+    - name: Install and activate stress test plugin (Query Monitor)
+      command: wp plugin install query-monitor --activate --path=/var/www/html/wordpress
+      args:
+        chdir: /var/www/html/wordpress
+
+    # Step 5: Restart services to apply configurations
+    - name: Restart Apache on AlmaLinux and CentOS
+      systemd:
+        name: httpd
+        state: restarted
+      when: ansible_distribution in ['CentOS', 'AlmaLinux']
+
+    - name: Restart Apache on Ubuntu and Debian
+      systemd:
+        name: apache2
+        state: restarted
+      when: ansible_distribution in ['Ubuntu', 'Debian']
+
+    - name: Restart MySQL
+      systemd:
+        name: mysqld
+        state: restarted
+      when: ansible_distribution in ['CentOS', 'AlmaLinux']
+
+    - name: Restart MySQL on Ubuntu and Debian
+      systemd:
+        name: mysql
+        state: restarted
+      when: ansible_distribution in ['Ubuntu', 'Debian']
+
+    - name: Restart PHP-FPM on AlmaLinux and CentOS
+      systemd:
+        name: php-fpm
+        state: restarted
+      when: ansible_distribution in ['CentOS', 'AlmaLinux']
+
+    - name: Restart PHP-FPM on Ubuntu and Debian
+      systemd:
+        name: php7.4-fpm
+        state: restarted
+      when: ansible_distribution in ['Ubuntu', 'Debian']
+
+  handlers:
+    - name: Restart Apache
+      systemd:
+        name: apache2
+        state: restarted
